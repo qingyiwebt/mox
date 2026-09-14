@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	proxyproto "github.com/pires/go-proxyproto"
@@ -25,10 +26,13 @@ const (
 var headerReaders = make(chan *bufio.Reader, headerReaderPoolSize)
 
 // Conn is a connection with the source and destination addresses supplied by a
-// PROXY header. All other operations, including closing and deadlines, are
-// delegated to the underlying connection.
+// PROXY header. Deadlines and writes are delegated to the underlying connection.
 type Conn struct {
 	net.Conn
+	mu         sync.Mutex
+	closed     bool
+	closeOnce  sync.Once
+	closeErr   error
 	prefix     []byte
 	remoteAddr net.Addr
 	localAddr  net.Addr
@@ -37,15 +41,35 @@ type Conn struct {
 // Read first drains bytes already read while parsing the PROXY header, then
 // reads directly from the underlying connection.
 func (c *Conn) Read(p []byte) (int, error) {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return 0, net.ErrClosed
+	}
 	if len(c.prefix) > 0 {
 		n := copy(p, c.prefix)
 		c.prefix = c.prefix[n:]
 		if len(c.prefix) == 0 {
 			c.prefix = nil
 		}
+		c.mu.Unlock()
 		return n, nil
 	}
+	c.mu.Unlock()
 	return c.Conn.Read(p)
+}
+
+// Close marks the connection closed before closing the underlying connection,
+// so buffered bytes are not returned by a later Read.
+func (c *Conn) Close() error {
+	c.closeOnce.Do(func() {
+		c.mu.Lock()
+		c.closed = true
+		c.prefix = nil
+		c.mu.Unlock()
+		c.closeErr = c.Conn.Close()
+	})
+	return c.closeErr
 }
 
 // RemoteAddr returns the source address from the PROXY header.
