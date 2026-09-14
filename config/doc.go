@@ -272,7 +272,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				TLSSessionTicketsDisabled: false
 
 				# Require a PROXY protocol v1 or v2 header on the dedicated SMTP port. Only
-				# connections from TrustedProxies are accepted. HTTPS/ALPN is not affected.
+				# connections from TrustedProxies are accepted.
 				# (optional)
 				ProxyProtocol:
 
@@ -295,7 +295,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				NoRequireSTARTTLS: false
 
 				# Require a PROXY protocol v1 or v2 header on the dedicated Submission port. Only
-				# connections from TrustedProxies are accepted. HTTPS/ALPN is not affected.
+				# connections from TrustedProxies are accepted.
 				# (optional)
 				ProxyProtocol:
 
@@ -344,7 +344,7 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				NoRequireSTARTTLS: false
 
 				# Require a PROXY protocol v1 or v2 header on the dedicated IMAP port. Only
-				# connections from TrustedProxies are accepted. HTTPS/ALPN is not affected.
+				# connections from TrustedProxies are accepted.
 				# (optional)
 				ProxyProtocol:
 

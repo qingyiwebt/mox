@@ -159,7 +159,7 @@ type Listener struct {
 		FirstTimeSenderDelay *time.Duration `sconf:"optional" sconf-doc:"Delay before accepting a message from a first-time sender for the destination account. Default: 15s."`
 
 		TLSSessionTicketsDisabled *bool          `sconf:"optional" sconf-doc:"Override default setting for enabling TLS session tickets. Disabling session tickets may work around TLS interoperability issues."`
-		ProxyProtocol             *ProxyProtocol `sconf:"optional" sconf-doc:"Require a PROXY protocol v1 or v2 header on the dedicated SMTP port. Only connections from TrustedProxies are accepted. HTTPS/ALPN is not affected."`
+		ProxyProtocol             *ProxyProtocol `sconf:"optional" sconf-doc:"Require a PROXY protocol v1 or v2 header on the dedicated SMTP port. Only connections from TrustedProxies are accepted."`
 
 		DNSBLZones []dns.Domain `sconf:"-"`
 	} `sconf:"optional"`
@@ -167,7 +167,7 @@ type Listener struct {
 		Enabled           bool
 		Port              int            `sconf:"optional" sconf-doc:"Default 587."`
 		NoRequireSTARTTLS bool           `sconf:"optional" sconf-doc:"Do not require STARTTLS. Since users must login, this means password may be sent without encryption. Not recommended."`
-		ProxyProtocol     *ProxyProtocol `sconf:"optional" sconf-doc:"Require a PROXY protocol v1 or v2 header on the dedicated Submission port. Only connections from TrustedProxies are accepted. HTTPS/ALPN is not affected."`
+		ProxyProtocol     *ProxyProtocol `sconf:"optional" sconf-doc:"Require a PROXY protocol v1 or v2 header on the dedicated Submission port. Only connections from TrustedProxies are accepted."`
 	} `sconf:"optional" sconf-doc:"SMTP for submitting email, e.g. by email applications. Starts out in plain text, can be upgraded to TLS with the STARTTLS command. Prefer using Submissions which is always a TLS connection."`
 	Submissions struct {
 		Enabled        bool
@@ -179,7 +179,7 @@ type Listener struct {
 		Enabled           bool
 		Port              int            `sconf:"optional" sconf-doc:"Default 143."`
 		NoRequireSTARTTLS bool           `sconf:"optional" sconf-doc:"Enable this only when the connection is otherwise encrypted (e.g. through a VPN)."`
-		ProxyProtocol     *ProxyProtocol `sconf:"optional" sconf-doc:"Require a PROXY protocol v1 or v2 header on the dedicated IMAP port. Only connections from TrustedProxies are accepted. HTTPS/ALPN is not affected."`
+		ProxyProtocol     *ProxyProtocol `sconf:"optional" sconf-doc:"Require a PROXY protocol v1 or v2 header on the dedicated IMAP port. Only connections from TrustedProxies are accepted."`
 	} `sconf:"optional" sconf-doc:"IMAP for reading email, by email applications. Starts out in plain text, can be upgraded to TLS with the STARTTLS command. Prefer using IMAPS instead which is always a TLS connection."`
 	IMAPS struct {
 		Enabled        bool
@@ -227,8 +227,7 @@ type Listener struct {
 	} `sconf:"optional" sconf-doc:"All configured WebHandlers will serve on an enabled listener. Either ACME must be configured, or for each WebHandler domain a TLS certificate must be configured."`
 }
 
-// ProxyProtocol configures strict PROXY protocol handling for one dedicated
-// SMTP or IMAP TCP port.
+// ProxyProtocol configures strict PROXY protocol handling for the TCP listener.
 type ProxyProtocol struct {
 	TrustedProxies   []string     `sconf:"optional" sconf-doc:"IP addresses or CIDR networks of proxies allowed to send PROXY protocol headers. At least one is required."`
 	TrustedProxyNets []*net.IPNet `sconf:"-" json:"-"`
