@@ -3,9 +3,12 @@ package proxyprotocol
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
+	"sync"
 	"testing"
+	"time"
 )
 
 type addrConn struct {
@@ -15,6 +18,57 @@ type addrConn struct {
 
 func (c addrConn) LocalAddr() net.Addr  { return c.local }
 func (c addrConn) RemoteAddr() net.Addr { return c.remote }
+
+type testListener struct {
+	conns     chan net.Conn
+	done      chan struct{}
+	closeOnce sync.Once
+	accepted  chan struct{}
+}
+
+func newTestListener() *testListener {
+	return &testListener{
+		conns:    make(chan net.Conn, 4),
+		done:     make(chan struct{}),
+		accepted: make(chan struct{}),
+	}
+}
+
+func (l *testListener) Accept() (net.Conn, error) {
+	select {
+	case conn := <-l.conns:
+		select {
+		case <-l.accepted:
+		default:
+			close(l.accepted)
+		}
+		return conn, nil
+	case <-l.done:
+		return nil, net.ErrClosed
+	}
+}
+
+func (l *testListener) Close() error {
+	l.closeOnce.Do(func() {
+		close(l.done)
+		for {
+			select {
+			case conn := <-l.conns:
+				_ = conn.Close()
+			default:
+				return
+			}
+		}
+	})
+	return nil
+}
+
+func (l *testListener) Addr() net.Addr { return testAddr("test") }
+
+type testAddr string
+
+func (a testAddr) Network() string { return string(a) }
+func (a testAddr) String() string  { return string(a) }
 
 var (
 	trustedLocal   = &net.TCPAddr{IP: net.ParseIP("192.0.2.10"), Port: 1000}
@@ -158,4 +212,94 @@ func TestRejectsUntrustedAndMalformed(t *testing.T) {
 			t.Errorf("accepted malformed header %q", input)
 		}
 	}
+}
+
+func TestListener(t *testing.T) {
+	base := newTestListener()
+	listener := NewListener(base, []*net.IPNet{trustedNetwork})
+
+	server, client := net.Pipe()
+	serverConn := addrConn{Conn: server, local: &net.TCPAddr{IP: net.ParseIP("198.51.100.2"), Port: 25}, remote: trustedLocal}
+	base.conns <- serverConn
+	go func() {
+		_, _ = client.Write([]byte("PROXY TCP4 203.0.113.4 198.51.100.2 1234 25\r\nhello"))
+	}()
+
+	conn, err := listener.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := conn.RemoteAddr().String(); got != "203.0.113.4:1234" {
+		t.Fatalf("remote address %s", got)
+	}
+	buf := make([]byte, 5)
+	if _, err := io.ReadFull(conn, buf); err != nil || string(buf) != "hello" {
+		t.Fatalf("application data %q, %v", buf, err)
+	}
+	_ = conn.Close()
+	_ = client.Close()
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestListenerSkipsMalformedConnections(t *testing.T) {
+	base := newTestListener()
+	listener := NewListener(base, []*net.IPNet{trustedNetwork})
+
+	badServer, badClient := net.Pipe()
+	base.conns <- addrConn{Conn: badServer, local: trustedLocal, remote: trustedLocal}
+	go func() {
+		_, _ = badClient.Write([]byte("not a proxy header\r\n"))
+		_ = badClient.Close()
+	}()
+
+	server, client := net.Pipe()
+	base.conns <- addrConn{Conn: server, local: trustedLocal, remote: trustedLocal}
+	go func() {
+		_, _ = client.Write([]byte("PROXY UNKNOWN\r\nhello"))
+	}()
+
+	conn, err := listener.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	defer client.Close()
+	defer conn.Close()
+	buf := make([]byte, 5)
+	if _, err := io.ReadFull(conn, buf); err != nil || string(buf) != "hello" {
+		t.Fatalf("application data %q, %v", buf, err)
+	}
+}
+
+func TestListenerCloseCancelsHandshake(t *testing.T) {
+	base := newTestListener()
+	listener := NewListener(base, []*net.IPNet{trustedNetwork})
+	server, client := net.Pipe()
+	base.conns <- addrConn{Conn: server, local: trustedLocal, remote: trustedLocal}
+
+	acceptErr := make(chan error, 1)
+	go func() {
+		_, err := listener.Accept()
+		acceptErr <- err
+	}()
+	select {
+	case <-base.accepted:
+	case <-time.After(time.Second):
+		t.Fatal("listener did not accept connection")
+	}
+
+	if err := listener.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-acceptErr:
+		if !errors.Is(err, net.ErrClosed) {
+			t.Fatalf("accept error %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Accept did not stop after Close")
+	}
+	_ = client.Close()
 }
