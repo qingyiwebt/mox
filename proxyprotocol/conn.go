@@ -6,28 +6,46 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"time"
 
 	proxyproto "github.com/pires/go-proxyproto"
 )
 
-const headerTimeout = 30 * time.Second
+const (
+	headerTimeout = 30 * time.Second
+
+	// The longest PROXY v1 line is 107 bytes including CRLF. The v1 parser
+	// requires the complete line to fit in the reader's first buffer.
+	headerReaderSize     = 108
+	headerReaderPoolSize = 64
+)
+
+var headerReaders = make(chan *bufio.Reader, headerReaderPoolSize)
 
 // Conn is a connection with the source and destination addresses supplied by a
 // PROXY header. All other operations, including closing and deadlines, are
 // delegated to the underlying connection.
 type Conn struct {
 	net.Conn
-	reader     *bufio.Reader
+	prefix     []byte
 	remoteAddr net.Addr
 	localAddr  net.Addr
 }
 
-// Read first drains bytes already buffered while parsing the PROXY header,
-// then reads directly from the underlying connection.
+// Read first drains bytes already read while parsing the PROXY header, then
+// reads directly from the underlying connection.
 func (c *Conn) Read(p []byte) (int, error) {
-	return c.reader.Read(p)
+	if len(c.prefix) > 0 {
+		n := copy(p, c.prefix)
+		c.prefix = c.prefix[n:]
+		if len(c.prefix) == 0 {
+			c.prefix = nil
+		}
+		return n, nil
+	}
+	return c.Conn.Read(p)
 }
 
 // RemoteAddr returns the source address from the PROXY header.
@@ -60,7 +78,8 @@ func NewConn(conn net.Conn, trustedProxies []*net.IPNet) (*Conn, error) {
 		return nil, fmt.Errorf("proxy peer %s is not trusted", peerIP)
 	}
 
-	reader := bufio.NewReader(conn)
+	reader := takeHeaderReader(conn)
+	defer releaseHeaderReader(reader)
 	header, err := proxyproto.ReadHeaderTimeout(conn, reader, headerTimeout)
 	if err != nil {
 		return nil, fmt.Errorf("read proxy header: %w", err)
@@ -73,7 +92,33 @@ func NewConn(conn net.Conn, trustedProxies []*net.IPNet) (*Conn, error) {
 	if !header.Command.IsLocal() {
 		remoteAddr, localAddr, _ = header.TCPAddrs()
 	}
-	return &Conn{Conn: conn, reader: reader, remoteAddr: remoteAddr, localAddr: localAddr}, nil
+
+	var prefix []byte
+	if n := reader.Buffered(); n > 0 {
+		prefix = make([]byte, n)
+		if _, err := io.ReadFull(reader, prefix); err != nil {
+			return nil, fmt.Errorf("read buffered proxy data: %w", err)
+		}
+	}
+	return &Conn{Conn: conn, prefix: prefix, remoteAddr: remoteAddr, localAddr: localAddr}, nil
+}
+
+func takeHeaderReader(conn net.Conn) *bufio.Reader {
+	select {
+	case reader := <-headerReaders:
+		reader.Reset(conn)
+		return reader
+	default:
+		return bufio.NewReaderSize(conn, headerReaderSize)
+	}
+}
+
+func releaseHeaderReader(reader *bufio.Reader) {
+	reader.Reset(nil)
+	select {
+	case headerReaders <- reader:
+	default:
+	}
 }
 
 func validateHeader(header *proxyproto.Header) error {
