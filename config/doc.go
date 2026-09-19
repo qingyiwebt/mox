@@ -271,8 +271,9 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# tickets may work around TLS interoperability issues. (optional)
 				TLSSessionTicketsDisabled: false
 
-				# Require a PROXY protocol v1 or v2 header on the dedicated SMTP port. Only
-				# connections from TrustedProxies are accepted.
+				# Require a PROXY protocol v1 or v2 header on the dedicated SMTP port. The proxy
+				# must only forward the raw TCP connection and original remote address; it must
+				# not terminate TLS. Only connections from TrustedProxies are accepted.
 				# (optional)
 				ProxyProtocol:
 
@@ -294,8 +295,9 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# without encryption. Not recommended. (optional)
 				NoRequireSTARTTLS: false
 
-				# Require a PROXY protocol v1 or v2 header on the dedicated Submission port. Only
-				# connections from TrustedProxies are accepted.
+				# Require a PROXY protocol v1 or v2 header on the dedicated Submission port. The
+				# proxy must only forward the raw TCP connection and original remote address; it
+				# must not terminate TLS. Only connections from TrustedProxies are accepted.
 				# (optional)
 				ProxyProtocol:
 
@@ -320,8 +322,9 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# technique for Delta Chat. (optional)
 				EnabledOnHTTPS: false
 
-				# Require a PROXY protocol v1 or v2 header on the dedicated Submissions port. Only
-				# connections from TrustedProxies are accepted. HTTPS/ALPN is not affected.
+				# Require a PROXY protocol v1 or v2 header on the dedicated Submissions port. The
+				# proxy must only forward the raw TCP connection and original remote address; it
+				# must not terminate TLS. Only connections from TrustedProxies are accepted.
 				# (optional)
 				ProxyProtocol:
 
@@ -343,8 +346,9 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# VPN). (optional)
 				NoRequireSTARTTLS: false
 
-				# Require a PROXY protocol v1 or v2 header on the dedicated IMAP port. Only
-				# connections from TrustedProxies are accepted.
+				# Require a PROXY protocol v1 or v2 header on the dedicated IMAP port. The proxy
+				# must only forward the raw TCP connection and original remote address; it must
+				# not terminate TLS. Only connections from TrustedProxies are accepted.
 				# (optional)
 				ProxyProtocol:
 
@@ -369,8 +373,9 @@ See https://pkg.go.dev/github.com/mjl-/sconf for details.
 				# technique for Delta Chat. (optional)
 				EnabledOnHTTPS: false
 
-				# Require a PROXY protocol v1 or v2 header on the dedicated IMAPS port. Only
-				# connections from TrustedProxies are accepted. HTTPS/ALPN is not affected.
+				# Require a PROXY protocol v1 or v2 header on the dedicated IMAPS port. The proxy
+				# must only forward the raw TCP connection and original remote address; it must
+				# not terminate TLS. Only connections from TrustedProxies are accepted.
 				# (optional)
 				ProxyProtocol:
 
