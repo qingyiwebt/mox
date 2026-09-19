@@ -17,6 +17,10 @@ import (
 const (
 	headerTimeout = 30 * time.Second
 
+	// PP2_CLIENT_SSL indicates that the client connected to the proxy over
+	// SSL/TLS. Mox terminates TLS itself, so such connections are rejected.
+	pp2ClientSSL byte = 0x01
+
 	// The longest PROXY v1 line is 107 bytes including CRLF. The v1 parser
 	// requires the complete line to fit in the reader's first buffer.
 	headerReaderSize     = 108
@@ -85,7 +89,7 @@ func (c *Conn) LocalAddr() net.Addr { return c.localAddr }
 //
 // A valid v1 UNKNOWN or v2 LOCAL header is accepted and leaves the underlying
 // connection addresses unchanged. Only TCP over IPv4 and IPv6 is accepted;
-// TLVs are parsed by the external library but not interpreted by Mox.
+// Mox ignores v2 TLVs except for rejecting the client-TLS indication.
 func NewConn(conn net.Conn, trustedProxies []*net.IPNet) (*Conn, error) {
 	peerIP, err := addrIP(conn.RemoteAddr())
 	if err != nil {
@@ -166,6 +170,27 @@ func validateHeader(header *proxyproto.Header) error {
 	}
 	if _, _, ok := header.TCPAddrs(); !ok {
 		return errors.New("proxy header has no TCP addresses")
+	}
+
+	// PROXY v2 TLVs are optional metadata. We only interpret the SSL TLV: its
+	// client flag means that TLS was already used on the client-to-proxy leg,
+	// which is not allowed for Mox listeners using PROXY protocol.
+	if header.Version == 2 {
+		tlvs, err := header.TLVs()
+		if err != nil {
+			return fmt.Errorf("invalid proxy TLVs: %w", err)
+		}
+		for _, tlv := range tlvs {
+			if tlv.Type != proxyproto.PP2_TYPE_SSL {
+				continue
+			}
+			if len(tlv.Value) < 5 {
+				return errors.New("proxy SSL TLV is malformed")
+			}
+			if tlv.Value[0]&pp2ClientSSL != 0 {
+				return errors.New("proxy header indicates client TLS was already handled by proxy")
+			}
+		}
 	}
 	return nil
 }
